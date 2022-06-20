@@ -1,5 +1,6 @@
 import sys
 import logging
+import pylab as plt
 import os
 from .interface import Interface
 
@@ -126,3 +127,31 @@ class DAT(Interface):
     def return_dict(self):
         self.logger.info('Returning DAT data as a dictionary')
         return self.hashdata
+
+    def plot(self,
+             log_y=True,
+             log_x=False,
+             linewidth=2,
+             height=8,
+             width=15,
+             fontsize=16,
+             title=None,
+             x_label=r'Q ($\AA^{-1}$)',
+             y_label=r'Intensity (cm$^{-1}$)'
+             ):
+        '''Use pyplt to graph the dat data'''
+        plt.rc('xtick',labelsize=fontsize-2)
+        plt.rc('ytick',labelsize=fontsize-2)
+        fig, ax = plt.subplots()
+        fig.set_figwidth(width)
+        fig.set_figheight(height)
+        if log_y:
+            plt.yscale('log')
+        if log_x:
+            plt.xscale('log')
+        if title:
+            ax.set_title(f'{title}', fontsize=fontsize)
+        plt.rc('lines', linewidth=linewidth)
+        ax.set_ylabel(y_label, fontsize=fontsize)
+        ax.set_xlabel(x_label, fontsize=fontsize)
+        plt.plot(self.hashdata['Q'],self.hashdata['I'])
