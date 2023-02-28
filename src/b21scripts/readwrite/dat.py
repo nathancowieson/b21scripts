@@ -15,7 +15,7 @@ class DAT(Interface):
     '''
     Constructor
     '''
-    def __init__(self, datfile):
+    def __init__(self, datfile=None):
         ###start a log file
         self.logger = logging.getLogger('readwrite.DAT')
         self.logger.setLevel(logging.DEBUG)
@@ -27,25 +27,30 @@ class DAT(Interface):
             self.logger.info('Starting a new readwrite.DAT job')        
         self.type = 'dat'
         self.is_outlier = False
-        if os.path.isfile(datfile) and datfile[-4:] == '.dat':
-            self.datfile = datfile
+        if hasattr(self, 'datfile'):
+            if os.path.isfile(datfile) and datfile[-4:] == '.dat':
+                self.datfile = datfile
+            else:
+                self.datfile = None
+                self.logger.info('No datfile was specified, will instantiate with an empty array')
         else:
             self.datfile = None
-            sys.exit(f'{datfile} either does not exist or is not of type ".dat"')
+            self.logger.info('No datfile was specified, will instantiate with an empty array')
 
-        self.hashdata = {}
+        self.hashdata = {'Q': [], 'I': [], 'E': []}
         self.high_q_window_range = (0.68,0.79)
         self.low_q_window_range = (0.02,0.05)
         self.low_q_window = 0
         self.high_q_window = 0
-        self.parse_file()
+        if self.datfile:
+            self.parse_file()
 
     def parse_file(self):
         self.logger.info(f'Reading and parsing dat file: {self.datfile}')
         qdata = []
         idata = []
         edata = []
-                
+        
         datafile = open(self.datfile, "r")
         saxsdata = datafile.readlines()
         for row in saxsdata:
@@ -58,12 +63,16 @@ class DAT(Interface):
                     idata.append(i)
                     edata.append(e)
             except:pass
-        self.hashdata = {'Q': qdata, 'I': idata, 'E': edata}
+        self.hashdata['Q'] = qdata
+        self.hashdata['I'] = idata
+        self.hashdata['E'] = edata
+
         #high Q window
         start=int(round(self.high_q_window_range[0]*len(self.ReturnDataColumn('Q'))))
         end=int(round(self.high_q_window_range[1]*len(self.ReturnDataColumn('Q'))))
         self.high_q_window = sum(self.ReturnDataColumn('I')[start:end])
         self.logger.info(f"Calculated high Q window in Q range: {self.ReturnDataColumn('Q')[start]}:{self.ReturnDataColumn('Q')[end]}")
+
         #low Q window
         start=int(round(self.low_q_window_range[0]*len(self.ReturnDataColumn('Q'))))
         end=int(round(self.low_q_window_range[1]*len(self.ReturnDataColumn('Q'))))
