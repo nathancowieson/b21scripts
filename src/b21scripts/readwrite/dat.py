@@ -28,12 +28,12 @@ class DAT(Interface):
         self.type = 'dat'
         self.is_outlier = False
 
-        self.hashdata = {}
+        self.hashdata = {'Q': [], 'I': [], 'E': []}
         self.high_q_window_range = (0.68,0.79)
         self.low_q_window_range = (0.02,0.05)
         self.low_q_window = 0
         self.high_q_window = 0
-        if self.set_datfile(datfile):
+        if self.datfile:
             self.parse_file()
 
     def set_datfile(self, datfile):
@@ -56,7 +56,7 @@ class DAT(Interface):
         qdata = []
         idata = []
         edata = []
-                
+        
         datafile = open(self.datfile, "r")
         saxsdata = datafile.readlines()
         for row in saxsdata:
@@ -69,12 +69,16 @@ class DAT(Interface):
                     idata.append(i)
                     edata.append(e)
             except:pass
-        self.hashdata = {'Q': qdata, 'I': idata, 'E': edata}
+        self.hashdata['Q'] = qdata
+        self.hashdata['I'] = idata
+        self.hashdata['E'] = edata
+
         #high Q window
         start=int(round(self.high_q_window_range[0]*len(self.ReturnDataColumn('Q'))))
         end=int(round(self.high_q_window_range[1]*len(self.ReturnDataColumn('Q'))))
         self.high_q_window = sum(self.ReturnDataColumn('I')[start:end])
         self.logger.info(f"Calculated high Q window in Q range: {self.ReturnDataColumn('Q')[start]}:{self.ReturnDataColumn('Q')[end]}")
+
         #low Q window
         start=int(round(self.low_q_window_range[0]*len(self.ReturnDataColumn('Q'))))
         end=int(round(self.low_q_window_range[1]*len(self.ReturnDataColumn('Q'))))
