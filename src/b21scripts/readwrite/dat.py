@@ -15,7 +15,7 @@ class DAT(Interface):
     '''
     Constructor
     '''
-    def __init__(self, datfile):
+    def __init__(self, datfile=None):
         ###start a log file
         self.logger = logging.getLogger('readwrite.DAT')
         self.logger.setLevel(logging.DEBUG)
@@ -27,19 +27,30 @@ class DAT(Interface):
             self.logger.info('Starting a new readwrite.DAT job')        
         self.type = 'dat'
         self.is_outlier = False
-        if os.path.isfile(datfile) and datfile[-4:] == '.dat':
-            self.datfile = datfile
-        else:
-            self.datfile = None
-            sys.exit(f'{datfile} either does not exist or is not of type ".dat"')
 
         self.hashdata = {}
         self.high_q_window_range = (0.68,0.79)
         self.low_q_window_range = (0.02,0.05)
         self.low_q_window = 0
         self.high_q_window = 0
-        self.parse_file()
+        if self.set_datfile(datfile):
+            self.parse_file()
 
+    def set_datfile(self, datfile):
+        '''Set the datfile'''
+        if datfile == None:
+            self.logger.info('No dat file provided, instantiating with empty data array')
+            self.datfile = None
+            return False
+        elif os.path.isfile(datfile) and str(datfile)[-4:] == '.dat':
+            self.datfile = str(datfile)
+            self.logger.info(f'{datfile} lookks like a valid datfile')
+            return True
+        else:
+            self.datfile = None
+            self.logger.error(f'{datfile} either does not exist or is not of type ".dat"')
+            return False
+            
     def parse_file(self):
         self.logger.info(f'Reading and parsing dat file: {self.datfile}')
         qdata = []
@@ -137,9 +148,38 @@ class DAT(Interface):
              fontsize=16,
              title=None,
              x_label=r'Q ($\AA^{-1}$)',
-             y_label=r'Intensity (cm$^{-1}$)'
+             y_label=r'Intensity (cm$^{-1}$)',
+             qrange_min=None,
+             qrange_max=None,
+             filename=None,
+             label='',
+             show=True
              ):
         '''Use pyplt to graph the dat data'''
+        min_index = 0
+        max_index = len(self.hashdata['Q'])-1
+        if qrange_min:
+            try:
+                qrange_min = float(qrange_min)
+                for i, q in enumerate(self.hashdata['Q']):
+                    if q<qrange_min:
+                        min_index = i
+                    else:
+                        break
+            except:
+                self.logger.error('qrange_min parameter for plot function should be a number')
+
+        if qrange_max:
+            try:
+                qrange_min = float(qrange_min)
+                for i, q in enumerate(self.hashdata['Q']):
+                    if q>qrange_max:
+                        max_index = i
+                        break
+            except:
+                self.logger.error('1qrange_max parameter for plot function should be a number')
+        if not show:
+            plt.ioff()
         plt.rc('xtick',labelsize=fontsize-2)
         plt.rc('ytick',labelsize=fontsize-2)
         fig, ax = plt.subplots()
@@ -154,4 +194,9 @@ class DAT(Interface):
         plt.rc('lines', linewidth=linewidth)
         ax.set_ylabel(y_label, fontsize=fontsize)
         ax.set_xlabel(x_label, fontsize=fontsize)
-        plt.plot(self.hashdata['Q'],self.hashdata['I'])
+        plt.plot(self.hashdata['Q'][min_index:max_index],self.hashdata['I'][min_index:max_index])
+        plt.title(f'{label}')
+        if filename:
+            plt.savefig(f'{filename}')
+        if not show:
+            plt.close(fig)
