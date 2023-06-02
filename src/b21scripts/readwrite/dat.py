@@ -33,7 +33,7 @@ class DAT(Interface):
         self.low_q_window_range = (0.02,0.05)
         self.low_q_window = 0
         self.high_q_window = 0
-        if self.datfile:
+        if self.set_datfile(datfile):
             self.parse_file()
 
     def set_datfile(self, datfile):
