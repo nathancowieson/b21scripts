@@ -39,6 +39,7 @@ class DAT(Interface):
         self.hashdata = pd.DataFrame.from_dict( {'Q': [], 'I': [], 'E': []}, orient='columns').set_index('Q')
         self.header=''
         self.footer=''
+        self.outliers = []
 
         #The units dictionary allows on the fly output in different unit schemes
         self.units={}
@@ -134,6 +135,7 @@ class DAT(Interface):
             self.hashdata = pd.read_table(self.datfile,
                                           skiprows=data_start,
                                           engine='python',
+                                          delim_whitespace=True,
                                           skipfooter=len(datdata)-data_end,
                                           names=['Q','I','E'],
                                           index_col=0
@@ -151,7 +153,7 @@ class DAT(Interface):
             self.logger.debug(f'Q value {q} was not found in the dat file')
             return False
 
-    def return_data_column(self, column='I', qmin=None, qmax=None, unit=None):
+    def return_data_column(self, column='I', qmin=None, qmax=None, unit=None, drop_outliers=True):
         '''Given column "Q", "I" or "E" will return data as a numpy array
         
         The optional argument unit refers to the entries in the units dictionary
@@ -187,11 +189,20 @@ class DAT(Interface):
                     return False
                 elif len(signature(self.units[unit][0]).parameters) == 2:
                     self.logger.info('The requested unit function has 2 arguments, will assume these refer to Q,I')
-                    return self.units[unit][0](self.hashdata.loc[qmin:qmax].index.values,self.hashdata.loc[qmin:qmax]['I'].values)
+                    if drop_outliers:
+                        return self.units[unit][0](self.hashdata.drop(self.outliers).loc[qmin:qmax].index.values,self.hashdata.loc[qmin:qmax]['I'].values)
+                    else:
+                        return self.units[unit][0](self.hashdata.loc[qmin:qmax].index.values,self.hashdata.loc[qmin:qmax]['I'].values)
                 elif str(column).upper() in ['I', 'E']:
-                    return self.units[unit][0](self.hashdata.loc[qmin:qmax][column].values)
+                    if drop_outliers:
+                        return self.units[unit][0](self.hashdata.drop(self.outliers).loc[qmin:qmax][column].values)
+                    else:
+                        return self.units[unit][0](self.hashdata.loc[qmin:qmax][column].values)
                 elif str(column).upper() == 'Q':
-                    return self.units[unit][0](self.hashdata.loc[qmin:qmax].index.values)
+                    if drop_outliers:
+                        return self.units[unit][0](self.hashdata.drop(self.outliers).loc[qmin:qmax].index.values)
+                    else:
+                        return self.units[unit][0](self.hashdata.loc[qmin:qmax].index.values)
                 else:
                     self.logger.error('ReturnDataColumn function requires you specify either Q, I or E')
                     return False
@@ -200,19 +211,73 @@ class DAT(Interface):
                 return False
         else:
             if str(column).upper() in ['I', 'E']:
-                return self.hashdata.loc[qmin:qmax][column].values
+                if drop_outliers:
+                    return self.hashdata.drop(self.outliers).loc[qmin:qmax][column].values
+                else:
+                    return self.hashdata.loc[qmin:qmax][column].values
             elif str(column).upper() == 'Q':
-                return self.hashdata.loc[qmin:qmax].index.values
+                if drop_outliers:
+                    return self.hashdata.drop(self.outliers).loc[qmin:qmax].index.values
+                else:
+                    return self.hashdata.loc[qmin:qmax].index.values
             else:
                 self.logger.error('ReturnDataColumn function requires you specify either Q, I or E')
                 return False
-        
+
+    def find_outliers(self, n_stds=3, window_size=11):
+        ''' Finds outliers in dat files i.e. hot pixels etc
+
+        Applies a rolling window to the dat file data and identifies outliers
+        as being n_stds (default is 3) x the median error taken from the error
+        column above the median intensity value. Returns the outliers as an
+        array of Q values
+        '''
+        self.logger.debug('The find_outliers method was called')
+        if not isinstance(n_stds, (float, int)):
+            self.logger.error('the n_stds option in the find_outliers function needs to be a number')
+            return False
+
+        if not isinstance(window_size, (int)):
+            self.logger.error('the window_size option in the find_outliers function should be an integer')
+            return False
+
+        if (window_size % 2) == 0:
+            self.logger.warning('the window_size option in the find_outliers function should be odd, will add 1')
+            window_size+=1
+
+        r = self.hashdata.rolling(window_size, center=True)
+        outliers = (self.hashdata['I'] > ( r.I.median() + (3 * r.E.median()))).to_frame(name='outlier').query('outlier').index.to_list()
+        self.logger.info(f'Found {len(outliers)} outliers')
+        return outliers
+
+    def set_outliers(self, n_stds=3, window_size=11):
+        ''' Runs the find_outliers function and sets result to self.outliers'''
+        self.logger.debug('The set_outliers method was called')
+        if not isinstance(n_stds, (float, int)):
+            self.logger.error('the n_stds option in the find_outliers function needs to be a number')
+            return False
+
+        if not isinstance(window_size, (int)):
+            self.logger.error('the window_size option in the find_outliers function should be an integer')
+            return False
+
+        if (window_size % 2) == 0:
+            self.logger.warning('the window_size option in the find_outliers function should be odd, will add 1')
+            window_size+=1
+
+        self.outliers = self.find_outliers(n_stds, window_size)
+
+    def clear_outliers(self):
+        '''Clears the outliers list'''
+        self.logger.debug('The clear_outliers method was called')
+        self.outliers = []
+            
     def return_file(self):
         self.logger.debug('The return_file method was called')        
         self.logger.info('Writing out a formatted DAT file')
         string_list = [self.header]
         string_list.append("%-15s %-13s %-13s\n" % ("Q(A-1)","I(au)","Error"))
-        for q in self.return_data_column('Q'):
+        for q in self.return_data_column('Q', drop_outliers=True):
             if q > 0:
                 i,e = self.return_ie_data(q)
                 string_list.append('{:<15.7E} {:<13.6E} {:<13.6E}\n'.format(q,i,e))
@@ -276,9 +341,13 @@ class DAT(Interface):
         plt.rc('lines', linewidth=linewidth)
         ax.set_ylabel(y_label, fontsize=fontsize)
         ax.set_xlabel(x_label, fontsize=fontsize)
-        q=self.return_data_column(column='Q', qmin=qrange_min, qmax=qrange_max, unit=x_unit).tolist()
-        i=self.return_data_column(column='I', qmin=qrange_min, qmax=qrange_max, unit=y_unit).tolist()
+        q=self.return_data_column(column='Q', qmin=qrange_min, qmax=qrange_max, unit=x_unit, drop_outliers=False).tolist()
+        i=self.return_data_column(column='I', qmin=qrange_min, qmax=qrange_max, unit=y_unit, drop_outliers=False).tolist()
         plt.plot(q,i)
+        if len(self.outliers) > 0:
+            q_outlier = self.hashdata.loc[self.outliers].index.to_list()
+            i_outlier = self.hashdata.loc[self.outliers].I.to_list()
+            plt.plot(q_outlier, i_outlier, 'ro')
         y_bottom,y_top = plt.ylim()
         self.logger.debug(f'autoscale limits are {y_top}x{y_bottom}')
         if yrange_min == None:
